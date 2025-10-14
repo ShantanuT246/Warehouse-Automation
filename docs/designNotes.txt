@@ -1,0 +1,14 @@
+SKU (primary key): 64-bit integer
+
+	1.	Inventory record fields (fixed-layout suggestion)
+	•	sku_id (uint64) — primary key
+	•	sku_string (string, optional fixed-length or stored in data record)
+	•	category (fixed-length string or category_id uint32)
+	•	quantity (int32)
+	•	shelf_location (e.g., x,y pair or string of format “A3-5”)
+	•	arrival_time (int64 timestamp) optional
+	•	expiry_time (int64 timestamp) optional
+
+For simplicity, the B+ tree leaf stores the complete record directly (no separate data file or pointer system).
+Page size (common default = 4096 bytes).
+Pointers to pages: use 64-bit offsets
