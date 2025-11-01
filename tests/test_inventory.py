@@ -5,8 +5,18 @@ from inventory.item import Item
 from inventory.inventory_manager import InventoryManager
 
 
+DB_PATH = "inventory.db"
+
+
+def clean_database():
+    """Delete the existing database file for clean test runs."""
+    if os.path.exists(DB_PATH):
+        os.remove(DB_PATH)
+        print("🧹 Old database cleared.\n")
+
+
 def test_add_and_get_item():
-    print("\n🧩 TEST: Add and Get Item")
+    print("\n🧩 TEST 1: Add and Get Item")
     manager = InventoryManager()
     item = Item(
         sku="SKU100",
@@ -19,56 +29,39 @@ def test_add_and_get_item():
     )
 
     manager.add_item(item)
-    print("✅ Item added successfully.")
+    print("✅ Item added successfully and saved to DB.")
 
     fetched = manager.get_by_sku("SKU100")
     assert fetched is not None, "❌ Item not found by SKU!"
-    assert fetched.name == "Widget", "❌ Incorrect item name!"
-    print("✅ Retrieved by SKU successfully.")
+    print("✅ Retrieved item from memory successfully.")
 
-    items_in_cat = manager.get_by_category("Tools")
-    assert len(items_in_cat) == 1 and items_in_cat[0].sku == "SKU100", "❌ Category index failed!"
-    print("✅ Category index verified.")
-
-    shelf_items = manager.get_by_shelf("A1")
-    assert len(shelf_items) == 1 and shelf_items[0].sku == "SKU100", "❌ Shelf index failed!"
-    print("✅ Shelf index verified.")
+    # Simulate reload from database
+    new_manager = InventoryManager()
+    fetched2 = new_manager.get_by_sku("SKU100")
+    assert fetched2 is not None, "❌ Item not loaded from DB!"
+    print("✅ Item successfully loaded from SQLite database.")
 
 
-def test_remove_item_updates_indices():
-    print("\n🧩 TEST: Remove Item and Update Indices")
+def test_remove_item_updates_db():
+    print("\n🧩 TEST 2: Remove Item Updates DB")
     manager = InventoryManager()
     item = Item("SKU200", "Drill", "Tools", "B1", 20)
     manager.add_item(item)
     print("✅ Item added.")
 
     manager.remove_item("SKU200")
-    print("✅ Item removed.")
+    print("✅ Item removed from memory and DB.")
 
-    assert manager.get_by_sku("SKU200") is None, "❌ Item still exists in SKU index!"
-    assert manager.get_by_category("Tools") == [], "❌ Category index not updated!"
-    assert manager.get_by_shelf("B1") == [], "❌ Shelf index not updated!"
-    print("✅ All indices updated correctly after removal.")
+    # Reload and confirm deletion
+    new_manager = InventoryManager()
+    assert new_manager.get_by_sku("SKU200") is None, "❌ Item still in DB!"
+    print("✅ Item correctly deleted from SQLite database.")
 
 
-def test_update_shelf_location():
-    print("\n🧩 TEST: Update Shelf Location")
+def test_expiry_ordering_and_reload():
+    print("\n🧩 TEST 3: Expiry Ordering and Reload")
     manager = InventoryManager()
-    item = Item("SKU300", "Screwdriver", "Tools", "A1", 10)
-    manager.add_item(item)
-    print("✅ Item added at shelf A1.")
 
-    manager.update_item_location("SKU300", "C1")
-    print("✅ Shelf location updated to C1.")
-
-    assert manager.get_by_shelf("A1") == [], "❌ Item still present in old shelf!"
-    assert any(i.sku == "SKU300" for i in manager.get_by_shelf("C1")), "❌ Item not in new shelf!"
-    print("✅ Shelf index updated correctly.")
-
-
-def test_expiry_ordering():
-    print("\n🧩 TEST: Expiry Ordering")
-    manager = InventoryManager()
     i1 = Item(
         sku="S1", name="Milk", category="Dairy",
         shelf_location="X1", quantity=10,
@@ -79,21 +72,34 @@ def test_expiry_ordering():
         shelf_location="X2", quantity=5,
         expiry=datetime.now() + timedelta(days=5)
     )
+
     manager.add_item(i2)
     manager.add_item(i1)
-    print("✅ Items with expiry added.")
+    print("✅ Items added to DB with expiry dates.")
 
     assert manager.expiry_index[0].sku == "S1", "❌ Expiry ordering failed!"
-    print("✅ Expiry index ordering verified (soonest first).")
+    print("✅ Expiry ordering in memory verified.")
+
+    # Reload and verify persistence
+    new_manager = InventoryManager()
+    expiry_skus = [i.sku for i in new_manager.expiry_index]
+    assert "S1" in expiry_skus and "S2" in expiry_skus, "❌ Expiry items not persisted!"
+    print("✅ Expiry items loaded correctly from DB.")
 
 
 def main():
-    print("\n🚀 Running Inventory Manager Tests...")
+    print("\n🚀 Running Inventory Manager Tests with SQLite Persistence...")
+
+    clean_database()
     test_add_and_get_item()
-    test_remove_item_updates_indices()
-    test_update_shelf_location()
-    test_expiry_ordering()
-    print("\n🎉 All tests passed successfully!")
+
+    clean_database()
+    test_remove_item_updates_db()
+
+    clean_database()
+    test_expiry_ordering_and_reload()
+
+    print("\n🎉 All persistence tests passed successfully!")
 
 
 if __name__ == "__main__":

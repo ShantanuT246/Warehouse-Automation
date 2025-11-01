@@ -1,5 +1,6 @@
 from typing import Dict, List, Optional
 from inventory.item import Item
+from inventory.persistence import InventoryPersistence
 
 
 class InventoryManager:
@@ -8,11 +9,18 @@ class InventoryManager:
     """
 
     def __init__(self):
-        # Indices
+        # Initialize all indices first
         self.sku_index: Dict[str, Item] = {}
         self.category_index: Dict[str, List[Item]] = {}
         self.shelf_index: Dict[str, List[Item]] = {}
         self.expiry_index: List[Item] = []
+
+        # Then connect to SQLite
+        self.db = InventoryPersistence()
+
+        # Now safely load items from DB into memory
+        for item in self.db.load_all():
+            self.add_item(item)
 
     def add_item(self, item: Item) -> None:
         """Add a new item to all indices."""
@@ -35,6 +43,8 @@ class InventoryManager:
         if getattr(item, "expiry", None):
             self.expiry_index.append(item)
             self.expiry_index.sort(key=lambda x: x.expiry)
+        
+        self.db.save_item(item)
 
     def get_by_sku(self, sku: str) -> Optional[Item]:
         """Return item by SKU."""
@@ -68,7 +78,8 @@ class InventoryManager:
 
         # Remove from expiry index
         self.expiry_index = [i for i in self.expiry_index if i.sku != sku]
-
+        
+        self.db.delete_item(sku)
         return item
 
     def update_item_location(self, sku: str, new_shelf: str) -> bool:
@@ -95,3 +106,11 @@ class InventoryManager:
     def list_all_items(self) -> List[Item]:
         """Return all items currently in inventory."""
         return list(self.sku_index.values())
+    
+    def persist_snapshot(self):
+        for item in self.list_all_items():
+            self.db.save_item(item)
+
+    def load_snapshot(self):
+        for item in self.db.load_all():
+            self.add_item(item)
