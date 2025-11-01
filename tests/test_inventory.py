@@ -88,7 +88,7 @@ def test_expiry_ordering_and_reload():
 
 
 def main():
-    print("\n🚀 Running Inventory Manager Tests with SQLite Persistence...")
+    print("\n🚀 Running Inventory Manager Tests")
 
     clean_database()
     test_add_and_get_item()

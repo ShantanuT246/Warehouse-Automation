@@ -42,7 +42,7 @@ class Item:
         self.expiry: Optional[datetime.datetime] = expiry
 
     def __repr__(self) -> str:
-        return f"<Item SKU={self.sku}, Name={self.name}, Cat={self.category}, Loc={self.shelf_location}, Qty={self.quantity}>"
+        return f"SKU={self.sku}, Name={self.name}, Qty={self.quantity}, Shelf={self.shelf_location}, Expiry={self.expiry.strftime('%Y-%m-%d %H:%M:%S')}"
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a dictionary representation of all attributes."""
