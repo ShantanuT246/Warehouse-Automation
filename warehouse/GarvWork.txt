@@ -1,0 +1,4 @@
+To go through the folder:
+First we go to models.py
+then layout which contains the actual layout of the warehouse only in grid model
+then check the example 
