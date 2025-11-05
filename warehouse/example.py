@@ -1,4 +1,6 @@
 # warehouse/example.py
+import sys, os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from warehouse.layout import Warehouse
 from warehouse.models import ShelfLocation, SpecialNode
 
@@ -11,10 +13,10 @@ def create_sample_warehouse():
 
     # Add shelves (max 4)
     shelves = [
-        ShelfLocation("A", (2, 2), capacity=10),
-        ShelfLocation("B", (2, 6), capacity=8),
-        ShelfLocation("C", (6, 2), capacity=12),
-        ShelfLocation("D", (6, 6), capacity=9),
+        ShelfLocation("A", (2, 2), capacity=1),
+        ShelfLocation("B", (2, 6), capacity=100),
+        ShelfLocation("C", (6, 2), capacity=100),
+        ShelfLocation("D", (6, 6), capacity=100),
     ]
     for shelf in shelves:
         warehouse.add_shelf(shelf)

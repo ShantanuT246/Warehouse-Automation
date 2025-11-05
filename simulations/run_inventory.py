@@ -20,10 +20,10 @@ def main():
         choice = input("\nEnter choice: ").strip()
 
         if choice == "1":
-            sku = input("Enter SKU: ").strip()
+            sku = input("Enter SKU (Unique Number): ").strip()
             name = input("Enter Name: ").strip()
             category = input("Enter Category: ").strip()
-            shelf = input("Enter Shelf Location: ").strip()
+            shelf = input("Enter Shelf Location (eg. A23, B43): ").strip()
             qty = int(input("Enter Quantity: ").strip())
             expiry_input = input("Expiry in how many days? (Press Enter to skip): ").strip()
             expiry_date = None
@@ -35,7 +35,7 @@ def main():
                     print("⚠️ Invalid input. Skipping expiry date.")
 
             item = Item(
-                sku=sku,
+                sku="SKU"+sku,
                 name=name,
                 category=category,
                 shelf_location=shelf,
