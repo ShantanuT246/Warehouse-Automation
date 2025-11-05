@@ -1,6 +1,14 @@
 from typing import Dict, List, Optional
 from inventory.item import Item
-from inventory.persistence import InventoryPersistence
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+try:
+    from persistence import UnifiedPersistence
+    USE_UNIFIED = True
+except ImportError:
+    from inventory.persistence import InventoryPersistence
+    USE_UNIFIED = False
 
 
 class InventoryManager:
@@ -8,7 +16,7 @@ class InventoryManager:
     Handles basic CRUD operations and keeps multiple indices in sync.
     """
 
-    def __init__(self):
+    def __init__(self, db_path="warehouse.db", use_unified=True):
         # Initialize all indices first
         self.sku_index: Dict[str, Item] = {}
         self.category_index: Dict[str, List[Item]] = {}
@@ -16,11 +24,16 @@ class InventoryManager:
         self.expiry_index: List[Item] = []
 
         # Then connect to SQLite
-        self.db = InventoryPersistence()
-
-        # Now safely load items from DB into memory
-        for item in self.db.load_all():
-            self.add_item(item)
+        if use_unified and USE_UNIFIED:
+            self.db = UnifiedPersistence(db_path)
+            # Now safely load items from DB into memory
+            for item in self.db.load_all_items():
+                self.add_item(item)
+        else:
+            self.db = InventoryPersistence(db_path)
+            # Now safely load items from DB into memory
+            for item in self.db.load_all():
+                self.add_item(item)
 
     def add_item(self, item: Item) -> None:
         """Add a new item to all indices."""
@@ -79,7 +92,10 @@ class InventoryManager:
         # Remove from expiry index
         self.expiry_index = [i for i in self.expiry_index if i.sku != sku]
         
-        self.db.delete_item(sku)
+        if USE_UNIFIED and isinstance(self.db, UnifiedPersistence):
+            self.db.delete_item(sku)
+        else:
+            self.db.delete_item(sku)
         return item
 
     def update_item_location(self, sku: str, new_shelf: str) -> bool:
@@ -112,5 +128,9 @@ class InventoryManager:
             self.db.save_item(item)
 
     def load_snapshot(self):
-        for item in self.db.load_all():
-            self.add_item(item)
+        if USE_UNIFIED and isinstance(self.db, UnifiedPersistence):
+            for item in self.db.load_all_items():
+                self.add_item(item)
+        else:
+            for item in self.db.load_all():
+                self.add_item(item)
