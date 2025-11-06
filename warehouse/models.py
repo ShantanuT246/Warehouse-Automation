@@ -25,6 +25,7 @@ class SpecialNode:
 @dataclass
 class GridCell:
     """Represents a single cell in the warehouse grid."""
-    cell_type: str  # "free", "shelf", "lane", "dock", "truck_bay", "packing"
+    cell_type: str  # "free", "shelf", "lane", "lane_forward", "lane_backward", "dock", "truck_bay", "packing"
     shelf: Optional[ShelfLocation] = None
     node: Optional[SpecialNode] = None
+    direction: Optional[str] = None  # For bidirectional lanes: "forward", "backward", "both"

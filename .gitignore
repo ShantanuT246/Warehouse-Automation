@@ -1,0 +1,43 @@
+# ---------------------------
+# Python & virtual environment
+# ---------------------------
+venv/
+
+# ---------------------------
+# Byte-compiled / cache files
+# ---------------------------
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# ---------------------------
+# SQLite / database files
+# ---------------------------
+*.sqlite3
+*.db
+*.db-journal
+
+# ---------------------------
+# Streamlit / logs / temp
+# ---------------------------
+.streamlit/
+*.log
+
+# ---------------------------
+# macOS specific
+# ---------------------------
+.DS_Store
+
+# ---------------------------
+# VSCode / IDE files
+# ---------------------------
+.vscode/
+.idea/
+*.code-workspace
+
+# ---------------------------
+# Jupyter / notebooks checkpoints
+# ---------------------------
+.ipynb_checkpoints/

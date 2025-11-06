@@ -17,8 +17,8 @@ def create_default_warehouse() -> Warehouse:
     """Create a default warehouse layout with shelves."""
     warehouse = Warehouse(rows=9, cols=9)
     
-    # Define robot lanes
-    warehouse.create_robot_lanes(lane_rows=[3, 5])
+    # Define robot lanes (bidirectional)
+    warehouse.create_robot_lanes(lane_rows=[3, 5], bidirectional=True)
     
     # Add shelves (matching the example format)
     shelves = [

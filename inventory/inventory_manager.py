@@ -26,19 +26,28 @@ class InventoryManager:
         # Then connect to SQLite
         if use_unified and USE_UNIFIED:
             self.db = UnifiedPersistence(db_path)
-            # Now safely load items from DB into memory
+            # Now safely load items from DB into memory (skip_db=True to avoid duplicate saves)
             for item in self.db.load_all_items():
-                self.add_item(item)
+                self.add_item(item, skip_db=True)
         else:
             self.db = InventoryPersistence(db_path)
-            # Now safely load items from DB into memory
+            # Now safely load items from DB into memory (skip_db=True to avoid duplicate saves)
             for item in self.db.load_all():
-                self.add_item(item)
+                self.add_item(item, skip_db=True)
 
-    def add_item(self, item: Item) -> None:
-        """Add a new item to all indices."""
+    def add_item(self, item: Item, skip_db: bool = False) -> None:
+        """
+        Add a new item to all indices.
+        
+        Args:
+            item: Item to add
+            skip_db: If True, don't save to database (used when loading from DB)
+        """
         if item.sku in self.sku_index:
-            raise ValueError(f"Item with SKU {item.sku} already exists.")
+            # Don't raise error if loading from DB - just skip
+            if not skip_db:
+                raise ValueError(f"Item with SKU {item.sku} already exists.")
+            return
 
         self.sku_index[item.sku] = item
 
@@ -57,7 +66,12 @@ class InventoryManager:
             self.expiry_index.append(item)
             self.expiry_index.sort(key=lambda x: x.expiry)
         
-        self.db.save_item(item)
+        # Only save to DB if not loading from DB
+        if not skip_db:
+            if USE_UNIFIED and isinstance(self.db, UnifiedPersistence):
+                self.db.save_item(item)
+            else:
+                self.db.save_item(item)
 
     def get_by_sku(self, sku: str) -> Optional[Item]:
         """Return item by SKU."""

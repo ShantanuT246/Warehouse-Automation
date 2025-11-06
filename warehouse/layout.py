@@ -36,14 +36,34 @@ class Warehouse:
         self.grid[r][c] = GridCell(node.node_type, node=node)
         self.special_nodes.append(node)
 
-    def create_robot_lanes(self, lane_rows: List[int]):
-        """Marks specific rows as robot movement lanes."""
+    def create_robot_lanes(self, lane_rows: List[int], bidirectional: bool = True):
+        """
+        Marks specific rows as robot movement lanes.
+        
+        Args:
+            lane_rows: List of row indices to mark as lanes
+            bidirectional: If True, creates forward and backward lanes
+        """
         for r in lane_rows:
             if not (0 <= r < self.rows):
                 raise ValueError(f"Lane row {r} out of bounds.")
-            for c in range(self.cols):
-                if self.grid[r][c].cell_type == "free":
-                    self.grid[r][c] = GridCell("lane")
+            
+            if bidirectional:
+                # Create bidirectional lanes: left half for backward, right half for forward
+                mid_col = self.cols // 2
+                for c in range(self.cols):
+                    if self.grid[r][c].cell_type == "free":
+                        if c < mid_col:
+                            # Backward lane (left side)
+                            self.grid[r][c] = GridCell("lane_backward", direction="backward")
+                        else:
+                            # Forward lane (right side)
+                            self.grid[r][c] = GridCell("lane_forward", direction="forward")
+            else:
+                # Single direction lane
+                for c in range(self.cols):
+                    if self.grid[r][c].cell_type == "free":
+                        self.grid[r][c] = GridCell("lane", direction="both")
 
     # -------- Display & Utility --------
 
@@ -55,6 +75,8 @@ class Warehouse:
         symbols = {
             "free": ". ",
             "lane": "R ",
+            "lane_forward": "→ ",
+            "lane_backward": "← ",
             "shelf": "S ",
             "dock": "D ",
             "packing": "P ",

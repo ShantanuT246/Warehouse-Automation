@@ -24,9 +24,22 @@ class UnifiedPersistence:
             db_path: Path to SQLite database file
         """
         self.db_path = db_path
-        self.conn = sqlite3.connect(db_path)
+        # Allow connections from different threads (needed for Streamlit)
+        self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row  # Enable column access by name
+        # Enable WAL mode for better concurrency
+        self.conn.execute("PRAGMA journal_mode=WAL")
         self.create_tables()
+    
+    def _reconnect(self):
+        """Reconnect to database if connection is lost."""
+        try:
+            self.conn.close()
+        except:
+            pass
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self.conn.row_factory = sqlite3.Row
+        self.conn.execute("PRAGMA journal_mode=WAL")
     
     def create_tables(self):
         """Create all necessary tables for inventory and warehouse data."""
@@ -91,30 +104,60 @@ class UnifiedPersistence:
     
     def save_item(self, item: Item):
         """Insert or replace an item into the database."""
-        cur = self.conn.cursor()
-        cur.execute("""
-        INSERT OR REPLACE INTO inventory
-        (sku, name, category, shelf_location, quantity, arrival_time, expiry)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (
-            item.sku, item.name, item.category, item.shelf_location,
-            item.quantity,
-            item.arrival_time.isoformat() if item.arrival_time else None,
-            item.expiry.isoformat() if item.expiry else None
-        ))
-        self.conn.commit()
+        # Use a lock or ensure thread safety
+        try:
+            cur = self.conn.cursor()
+            cur.execute("""
+            INSERT OR REPLACE INTO inventory
+            (sku, name, category, shelf_location, quantity, arrival_time, expiry)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                item.sku, item.name, item.category, item.shelf_location,
+                item.quantity,
+                item.arrival_time.isoformat() if item.arrival_time else None,
+                item.expiry.isoformat() if item.expiry else None
+            ))
+            self.conn.commit()
+        except (sqlite3.ProgrammingError, sqlite3.OperationalError):
+            # If connection is closed or thread issue, reconnect
+            self._reconnect()
+            cur = self.conn.cursor()
+            cur.execute("""
+            INSERT OR REPLACE INTO inventory
+            (sku, name, category, shelf_location, quantity, arrival_time, expiry)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                item.sku, item.name, item.category, item.shelf_location,
+                item.quantity,
+                item.arrival_time.isoformat() if item.arrival_time else None,
+                item.expiry.isoformat() if item.expiry else None
+            ))
+            self.conn.commit()
     
     def delete_item(self, sku: str):
         """Delete an item by SKU."""
-        cur = self.conn.cursor()
-        cur.execute("DELETE FROM inventory WHERE sku = ?", (sku,))
-        self.conn.commit()
+        try:
+            cur = self.conn.cursor()
+            cur.execute("DELETE FROM inventory WHERE sku = ?", (sku,))
+            self.conn.commit()
+        except sqlite3.ProgrammingError:
+            self._reconnect()
+            cur = self.conn.cursor()
+            cur.execute("DELETE FROM inventory WHERE sku = ?", (sku,))
+            self.conn.commit()
     
     def load_all_items(self) -> List[Item]:
         """Load all items from database."""
-        cur = self.conn.cursor()
-        cur.execute("SELECT * FROM inventory")
-        rows = cur.fetchall()
+        try:
+            cur = self.conn.cursor()
+            cur.execute("SELECT * FROM inventory")
+            rows = cur.fetchall()
+        except (sqlite3.ProgrammingError, sqlite3.OperationalError):
+            self._reconnect()
+            cur = self.conn.cursor()
+            cur.execute("SELECT * FROM inventory")
+            rows = cur.fetchall()
+        
         items = []
         for r in rows:
             items.append(Item(
@@ -168,13 +211,23 @@ class UnifiedPersistence:
     
     def save_shelf(self, shelf: ShelfLocation):
         """Insert or replace a shelf in the database."""
-        cur = self.conn.cursor()
-        r, c = shelf.coordinates
-        cur.execute("""
-        INSERT OR REPLACE INTO shelves (id, row, col, capacity, current_load)
-        VALUES (?, ?, ?, ?, ?)
-        """, (shelf.id, r, c, shelf.capacity, shelf.current_load))
-        self.conn.commit()
+        try:
+            cur = self.conn.cursor()
+            r, c = shelf.coordinates
+            cur.execute("""
+            INSERT OR REPLACE INTO shelves (id, row, col, capacity, current_load)
+            VALUES (?, ?, ?, ?, ?)
+            """, (shelf.id, r, c, shelf.capacity, shelf.current_load))
+            self.conn.commit()
+        except (sqlite3.ProgrammingError, sqlite3.OperationalError):
+            self._reconnect()
+            cur = self.conn.cursor()
+            r, c = shelf.coordinates
+            cur.execute("""
+            INSERT OR REPLACE INTO shelves (id, row, col, capacity, current_load)
+            VALUES (?, ?, ?, ?, ?)
+            """, (shelf.id, r, c, shelf.capacity, shelf.current_load))
+            self.conn.commit()
     
     def delete_shelf(self, shelf_id: str):
         """Delete a shelf by ID."""
@@ -199,11 +252,19 @@ class UnifiedPersistence:
     
     def update_shelf_load(self, shelf_id: str, current_load: int):
         """Update the current load of a shelf."""
-        cur = self.conn.cursor()
-        cur.execute("""
-        UPDATE shelves SET current_load = ? WHERE id = ?
-        """, (current_load, shelf_id))
-        self.conn.commit()
+        try:
+            cur = self.conn.cursor()
+            cur.execute("""
+            UPDATE shelves SET current_load = ? WHERE id = ?
+            """, (current_load, shelf_id))
+            self.conn.commit()
+        except (sqlite3.ProgrammingError, sqlite3.OperationalError):
+            self._reconnect()
+            cur = self.conn.cursor()
+            cur.execute("""
+            UPDATE shelves SET current_load = ? WHERE id = ?
+            """, (current_load, shelf_id))
+            self.conn.commit()
     
     # ========== SPECIAL NODE METHODS ==========
     

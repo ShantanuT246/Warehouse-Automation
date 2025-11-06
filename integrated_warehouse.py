@@ -75,6 +75,7 @@ class IntegratedWarehouse:
             self.warehouse = warehouse
         
         # Initialize inventory manager with unified persistence
+        # This will load items from DB (with skip_db=True to prevent duplicates)
         self.inventory_manager = InventoryManager(db_path=db_path, use_unified=True)
         
         # Create shelf lookup by ID for quick validation
@@ -82,13 +83,13 @@ class IntegratedWarehouse:
             shelf.id: shelf for shelf in self.warehouse.shelves
         }
         
-        # Sync existing inventory items with shelf capacity
-        self._sync_inventory_with_shelves()
+        # Sync existing inventory items with shelf capacity (don't update DB here)
+        self._sync_inventory_with_shelves(skip_db=True)
         
-        # Sync shelf loads in database
+        # Sync shelf loads in database once at the end
         self.persistence.sync_shelf_loads()
     
-    def _sync_inventory_with_shelves(self):
+    def _sync_inventory_with_shelves(self, skip_db: bool = False):
         """Update shelf capacity tracking based on current inventory."""
         # Reset all shelf loads
         for shelf in self.warehouse.shelves:
@@ -100,8 +101,9 @@ class IntegratedWarehouse:
             if shelf_id in self.shelf_lookup:
                 shelf = self.shelf_lookup[shelf_id]
                 shelf.current_load += item.quantity
-                # Update in database
-                self.persistence.update_shelf_load(shelf_id, shelf.current_load)
+                # Update in database only if not skipping
+                if not skip_db:
+                    self.persistence.update_shelf_load(shelf_id, shelf.current_load)
     
     def add_item(self, item: Item) -> bool:
         """
@@ -272,7 +274,8 @@ class IntegratedWarehouse:
         # Save warehouse config
         lane_rows = []
         for r in range(self.warehouse.rows):
-            if any(self.warehouse.grid[r][c].cell_type == "lane" for c in range(self.warehouse.cols)):
+            if any(self.warehouse.grid[r][c].cell_type in ["lane", "lane_forward", "lane_backward"] 
+                   for c in range(self.warehouse.cols)):
                 lane_rows.append(r)
         
         self.persistence.save_warehouse_config(
