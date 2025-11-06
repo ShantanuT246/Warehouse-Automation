@@ -41,3 +41,10 @@ build/
 # Jupyter / notebooks checkpoints
 # ---------------------------
 .ipynb_checkpoints/
+
+# ---------------------------
+# Ignore Python cache directories and compiled files
+# ---------------------------
+__pycache__/
+*.pyc
+*.pyo
