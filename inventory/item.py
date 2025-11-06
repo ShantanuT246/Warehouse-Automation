@@ -33,7 +33,7 @@ class Item:
             raise ValueError("Quantity must be non-negative.")
         if arrival_time and expiry and expiry <= arrival_time:
             raise ValueError("Expiry time must be after arrival time.")
-        self.sku: str = "SKU"+sku
+        self.sku: str = sku
         self.name: str = name
         self.category: str = category
         self.shelf_location: str = shelf_location.capitalize()

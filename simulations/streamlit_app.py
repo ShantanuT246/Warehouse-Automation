@@ -85,33 +85,159 @@ def create_default_warehouse() -> Warehouse:
     return warehouse
 
 
-def visualize_warehouse_plotly(warehouse: IntegratedWarehouse, robot_manager: RobotManager = None):
+
+# --- UI Overhaul: New Visualization Functions ---
+def visualize_warehouse_plotly_3d(warehouse: IntegratedWarehouse, robot_manager: RobotManager = None, show_grid=True, show_paths=True):
+    """3D warehouse visualization using Plotly."""
+    w = warehouse.warehouse
+    rows, cols = w.rows, w.cols
+    fig = go.Figure()
+    # Draw shelves as 3D blocks
+    for shelf in w.shelves:
+        r, c = shelf.coordinates
+        fig.add_trace(go.Scatter3d(
+            x=[c], y=[r], z=[0.5],  # z=0.5 for shelf height
+            mode="markers+text",
+            marker=dict(size=20, color="#8B4513", symbol="cube"),
+            text=[shelf.id],
+            textposition="top center",
+            hoverinfo="text"
+        ))
+    # Draw special nodes
+    for node in w.special_nodes:
+        r, c = node.coordinates
+        color = {"dock": "blue", "packing": "yellow", "truck_bay": "orange"}.get(node.node_type, "gray")
+        fig.add_trace(go.Scatter3d(
+            x=[c], y=[r], z=[0],
+            mode="markers",
+            marker=dict(size=14, color=color, symbol="diamond"),
+            name=node.node_type
+        ))
+    # Draw robots
+    if robot_manager:
+        for robot in robot_manager.robots:
+            r, c = robot.position
+            state_colors = {
+                'idle': 'gray',
+                'moving': 'blue',
+                'picking': 'orange',
+                'delivering': 'green',
+                'returning': 'purple'
+            }
+            color = state_colors.get(robot.state.value, 'red')
+            fig.add_trace(go.Scatter3d(
+                x=[c], y=[r], z=[1],
+                mode="markers+text",
+                marker=dict(size=16, color=color, symbol="circle"),
+                text=[robot.robot_id],
+                textposition="top center",
+                name="Robot"
+            ))
+            # Draw robot path
+            if show_paths and robot.path and len(robot.path) > 1:
+                path_x = [pos[1] for pos in robot.path]
+                path_y = [pos[0] for pos in robot.path]
+                fig.add_trace(go.Scatter3d(
+                    x=path_x, y=path_y, z=[1]*len(path_x),
+                    mode="lines",
+                    line=dict(color="red", width=5),
+                    name="Path"
+                ))
+    # Draw grid lines (floor)
+    if show_grid:
+        for r in range(rows+1):
+            fig.add_trace(go.Scatter3d(
+                x=[-0.5, cols-0.5], y=[r-0.5, r-0.5], z=[0, 0],
+                mode="lines", line=dict(color="lightgray", width=1), showlegend=False
+            ))
+        for c in range(cols+1):
+            fig.add_trace(go.Scatter3d(
+                x=[c-0.5, c-0.5], y=[-0.5, rows-0.5], z=[0, 0],
+                mode="lines", line=dict(color="lightgray", width=1), showlegend=False
+            ))
+    fig.update_layout(
+        title="🏭 Warehouse 3D View",
+        scene=dict(
+            xaxis=dict(title="Column", range=[-0.5, cols-0.5]),
+            yaxis=dict(title="Row", range=[-0.5, rows-0.5]),
+            zaxis=dict(title="Height", range=[0, 2]),
+            aspectmode="manual", aspectratio=dict(x=cols/rows, y=1, z=0.4)
+        ),
+        width=900, height=700, showlegend=False, margin=dict(l=0, r=0, t=40, b=0),
+    )
+    return fig
+
+
+def visualize_warehouse_heatmap(warehouse: IntegratedWarehouse, robot_manager: RobotManager = None, show_grid=True):
+    """Show warehouse heatmap of shelf utilization."""
+    w = warehouse.warehouse
+    rows, cols = w.rows, w.cols
+    grid = np.zeros((rows, cols))
+    # Use shelf load/capacity as heat value, 0 for non-shelf
+    for shelf in w.shelves:
+        r, c = shelf.coordinates
+        try:
+            shelf_info = warehouse.get_shelf_info(shelf.id)
+            load = shelf_info.get("current_load", 0)
+            capacity = shelf_info.get("capacity", 1)
+            value = load / capacity if capacity > 0 else 0
+            grid[r, c] = value
+        except Exception:
+            grid[r, c] = 0
+    # Plot as heatmap
+    fig = go.Figure(data=go.Heatmap(
+        z=grid,
+        x=np.arange(cols),
+        y=np.arange(rows),
+        colorscale="YlOrRd",
+        zmin=0, zmax=1,
+        colorbar=dict(title="Shelf Utilization")
+    ))
+    # Optionally overlay grid lines
+    if show_grid:
+        for r in range(rows+1):
+            fig.add_shape(
+                type="line",
+                x0=-0.5, y0=r-0.5, x1=cols-0.5, y1=r-0.5,
+                line=dict(color="gray", width=0.5)
+            )
+        for c in range(cols+1):
+            fig.add_shape(
+                type="line",
+                x0=c-0.5, y0=-0.5, x1=c-0.5, y1=rows-0.5,
+                line=dict(color="gray", width=0.5)
+            )
+    fig.update_layout(
+        title="🔥 Warehouse Shelf Utilization Heatmap",
+        xaxis=dict(title="Column", range=[-0.5, cols-0.5], showgrid=False),
+        yaxis=dict(title="Row", range=[rows-0.5, -0.5], showgrid=False),
+        width=900, height=700, plot_bgcolor="white"
+    )
+    return fig
+
+
+def visualize_warehouse_plotly(warehouse: IntegratedWarehouse, robot_manager: RobotManager = None, show_grid=True, show_paths=True):
     """Create interactive 2D visualization of warehouse with robots using Plotly."""
     w = warehouse.warehouse
     rows, cols = w.rows, w.cols
-    
-    # Create figure
     fig = go.Figure()
-    
-    # Color mapping for different cell types
     color_map = {
         "free": "white",
-        "shelf": "#8B4513",  # brown
-        "lane_forward": "#87CEEB",  # light blue
-        "lane_backward": "#90EE90",  # light green
+        "shelf": "#8B4513",
+        "lane_forward": "#87CEEB",
+        "lane_backward": "#90EE90",
         "lane": "gray",
         "dock": "blue",
         "packing": "yellow",
         "truck_bay": "orange"
     }
-    
-    # Create grid cells
+    # Draw grid cells
     for r in range(rows):
         for c in range(cols):
             cell = w.grid[r][c]
             cell_type = cell.cell_type
             if cell_type == "free":
-                continue  # skip free cells to speed up rendering
+                continue
             color = color_map.get(cell_type, "white")
             fig.add_shape(
                 type="rect",
@@ -120,7 +246,22 @@ def visualize_warehouse_plotly(warehouse: IntegratedWarehouse, robot_manager: Ro
                 line=dict(color="black", width=1),
                 layer="below"
             )
-    
+    # Optionally overlay grid lines
+    if show_grid:
+        for r in range(rows+1):
+            fig.add_shape(
+                type="line",
+                x0=-0.5, y0=r-0.5, x1=cols-0.5, y1=r-0.5,
+                line=dict(color="lightgray", width=1),
+                layer="below"
+            )
+        for c in range(cols+1):
+            fig.add_shape(
+                type="line",
+                x0=c-0.5, y0=-0.5, x1=c-0.5, y1=rows-0.5,
+                line=dict(color="lightgray", width=1),
+                layer="below"
+            )
     # Add shelf labels
     shelf_text = []
     shelf_x = []
@@ -130,7 +271,6 @@ def visualize_warehouse_plotly(warehouse: IntegratedWarehouse, robot_manager: Ro
         shelf_x.append(c)
         shelf_y.append(r)
         shelf_text.append(shelf.id)
-    
     if shelf_text:
         fig.add_trace(go.Scatter(
             x=shelf_x, y=shelf_y,
@@ -140,7 +280,6 @@ def visualize_warehouse_plotly(warehouse: IntegratedWarehouse, robot_manager: Ro
             showlegend=False,
             hoverinfo='skip'
         ))
-    
     # Add robot positions and paths
     if robot_manager:
         robot_x = []
@@ -151,21 +290,18 @@ def visualize_warehouse_plotly(warehouse: IntegratedWarehouse, robot_manager: Ro
         robot_paths_y = []
         robot_remaining_paths_x = []
         robot_remaining_paths_y = []
-        
         for robot in robot_manager.robots:
             r, c = robot.position
             robot_x.append(c)
             robot_y.append(r)
             robot_ids.append(robot.robot_id.replace('_', ' '))
             robot_states.append(robot.state.value)
-            
             # Draw full path
-            if robot.path and len(robot.path) > 1:
+            if show_paths and robot.path and len(robot.path) > 1:
                 path_x = [pos[1] for pos in robot.path]
                 path_y = [pos[0] for pos in robot.path]
                 robot_paths_x.append(path_x)
                 robot_paths_y.append(path_y)
-                
                 # Draw remaining path
                 if robot.path_index < len(robot.path):
                     remaining_path = robot.path[robot.path_index:]
@@ -176,7 +312,6 @@ def visualize_warehouse_plotly(warehouse: IntegratedWarehouse, robot_manager: Ro
                 else:
                     robot_remaining_paths_x.append([])
                     robot_remaining_paths_y.append([])
-        
         # Draw full paths (dashed)
         for i, (path_x, path_y) in enumerate(zip(robot_paths_x, robot_paths_y)):
             if len(path_x) > 1:
@@ -189,7 +324,6 @@ def visualize_warehouse_plotly(warehouse: IntegratedWarehouse, robot_manager: Ro
                     name='Robot Path (Full)',
                     hoverinfo='skip'
                 ))
-        
         # Draw remaining paths (solid)
         for i, (path_x, path_y) in enumerate(zip(robot_remaining_paths_x, robot_remaining_paths_y)):
             if len(path_x) > 1:
@@ -203,7 +337,6 @@ def visualize_warehouse_plotly(warehouse: IntegratedWarehouse, robot_manager: Ro
                     name='Robot Path (Remaining)',
                     hoverinfo='skip'
                 ))
-        
         # Draw robots with state-based colors
         state_colors = {
             'idle': 'gray',
@@ -212,7 +345,6 @@ def visualize_warehouse_plotly(warehouse: IntegratedWarehouse, robot_manager: Ro
             'delivering': 'green',
             'returning': 'purple'
         }
-        
         for i, (x, y, robot_id, state) in enumerate(zip(robot_x, robot_y, robot_ids, robot_states)):
             color = state_colors.get(state, 'red')
             fig.add_trace(go.Scatter(
@@ -231,7 +363,6 @@ def visualize_warehouse_plotly(warehouse: IntegratedWarehouse, robot_manager: Ro
                 showlegend=i == 0,
                 hovertemplate=f'<b>{robot_id}</b><br>State: {state}<br>Position: ({y}, {x})<extra></extra>'
             ))
-            
             # Add state indicator
             fig.add_trace(go.Scatter(
                 x=[x + 0.3], y=[y + 0.3],
@@ -243,8 +374,6 @@ def visualize_warehouse_plotly(warehouse: IntegratedWarehouse, robot_manager: Ro
                 showlegend=False,
                 hoverinfo='skip'
             ))
-    
-    # Update layout
     fig.update_layout(
         title=dict(text='🏭 Warehouse Layout - Interactive 2D Visualization', 
                   font=dict(size=20, color='darkblue')),
@@ -253,14 +382,14 @@ def visualize_warehouse_plotly(warehouse: IntegratedWarehouse, robot_manager: Ro
             range=[-0.5, cols - 0.5],
             scaleanchor="y",
             scaleratio=1,
-            showgrid=True,
+            showgrid=show_grid,
             gridcolor='black',
             gridwidth=1
         ),
         yaxis=dict(
             title='Row',
-            range=[rows - 0.5, -0.5],  # Inverted for correct display
-            showgrid=True,
+            range=[rows - 0.5, -0.5],
+            showgrid=show_grid,
             gridcolor='black',
             gridwidth=1
         ),
@@ -270,7 +399,6 @@ def visualize_warehouse_plotly(warehouse: IntegratedWarehouse, robot_manager: Ro
         showlegend=True,
         legend=dict(x=1.02, y=1)
     )
-    
     return fig
 
 
@@ -363,35 +491,46 @@ def main():
     else:
         st.info("ℹ️ No inventory manager connected to this warehouse.")
     
-    # Two columns layout
-    col1, col2 = st.columns([2, 1])
-    
+    # --- UI Overhaul: New Visualization Section ---
+    # Sidebar view mode selector and visualization options
+    with st.sidebar:
+        st.header("🖼️ Visualization")
+        view_mode = st.radio("View Mode", ["2D Top‑Down", "3D View", "Heatmap"], horizontal=False)
+        with st.expander("Visualization Options", expanded=False):
+            show_grid = st.checkbox("Show grid lines", value=True, key="show_grid")
+            show_paths = st.checkbox("Show robot paths", value=True, key="show_paths")
+
+    # Two columns: left for visualization, right for controls
+    col1, col2 = st.columns([2, 1], gap="large")
     with col1:
         st.subheader("📊 Warehouse Visualization")
-        
-        # Update simulation if running
+        # Update robots if simulation running
         if st.session_state.simulation_running and robot_manager:
             current_time = datetime.now()
             delta_time = (current_time - st.session_state.last_update).total_seconds()
-            # Cap delta_time to prevent large jumps
-            delta_time = min(delta_time, 0.5)  # Max 0.5 seconds per update
+            delta_time = min(delta_time, 0.5)
             if delta_time > 0:
                 robot_manager.update(delta_time)
             st.session_state.last_update = current_time
-        
-        # Visualize with Plotly (interactive)
-        fig = visualize_warehouse_plotly(warehouse, robot_manager)
-        st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': True})
-        
-        # Auto-refresh if simulation is running
+        # Choose visualization based on sidebar selection
+        if view_mode == "2D Top‑Down":
+            fig = visualize_warehouse_plotly(warehouse, robot_manager, show_grid=show_grid, show_paths=show_paths)
+        elif view_mode == "3D View":
+            fig = visualize_warehouse_plotly_3d(warehouse, robot_manager, show_grid=show_grid, show_paths=show_paths)
+        elif view_mode == "Heatmap":
+            fig = visualize_warehouse_heatmap(warehouse, robot_manager, show_grid=show_grid)
+        else:
+            fig = None
+        if fig is not None:
+            st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': True})
+        # Auto-refresh if simulation running
         if st.session_state.simulation_running:
-            time.sleep(0.3)  # Slight delay for better animation visibility
+            time.sleep(0.3)
             st.rerun()
-    
+
     with col2:
-        # Create tabs for organized functionality
+        # Controls in tabs: Inventory, Search, Warehouse, Robots
         tab1, tab2, tab3, tab4 = st.tabs(["📦 Inventory", "🔍 Search", "📊 Warehouse", "🤖 Robots"])
-        
         # TAB 1: INVENTORY MANAGEMENT
         with tab1:
             st.subheader("Inventory Operations")
@@ -637,16 +776,30 @@ def main():
             if robot_manager:
                 # Request item
                 st.write("**Request Item Retrieval**")
-                sku_input = st.text_input("Enter SKU to retrieve:", key="sku_input")
+                # Build dropdown options: "SKU - Item Name (Category)"
+                sku_options = []
+                sku_to_sku_value = {}
+                for i in items:
+                    label = f"{i.sku} - {i.name} ({i.category})"
+                    sku_options.append(label)
+                    sku_to_sku_value[label] = i.sku
+                if sku_options:
+                    selected_label = st.selectbox("Select SKU to retrieve:", sku_options, key="sku_selectbox")
+                    # Extract SKU value from selection
+                    selected_sku = sku_to_sku_value[selected_label] if selected_label else None
+                else:
+                    selected_label = None
+                    selected_sku = None
+                    st.info("No items available for retrieval.")
                 if st.button("📥 Request Item", use_container_width=True):
-                    if sku_input:
-                        task_id = robot_manager.request_item(sku_input)
+                    if selected_sku:
+                        task_id = robot_manager.request_item(selected_sku)
                         if task_id:
                             st.success(f"✅ Task created: {task_id[:8]}...")
                         else:
                             st.error("❌ Item not found or invalid")
                     else:
-                        st.warning("Please enter a SKU")
+                        st.warning("Please select an item to retrieve")
                 
                 st.markdown("---")
                 
@@ -682,16 +835,14 @@ def main():
                     st.info("No tasks in queue")
             else:
                 st.info("Initialize warehouse first to use robot features")
+    # Summary metrics below columns
     st.markdown("---")
     col3, col4, col5 = st.columns(3)
-    
     with col3:
         st.metric("Total Items", len(items) if items else 0)
-    
     with col4:
         total_qty = sum(item.quantity for item in items) if items else 0
         st.metric("Total Quantity", total_qty)
-    
     with col5:
         if robot_manager:
             total_tasks = len(robot_manager.all_tasks)
